@@ -9,7 +9,7 @@ import (
 	"reflect"
 
 	"github.com/Jeffail/gabs"
-	"github.com/golang/protobuf/proto" //nolint
+	"google.golang.org/protobuf/proto" //nolint
 	"github.com/jeremywohl/flatten"
 )
 

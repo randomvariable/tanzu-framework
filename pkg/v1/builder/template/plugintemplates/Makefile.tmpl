@@ -6,6 +6,8 @@ BUILD_VERSION ?= $(shell cat BUILD_VERSION)
 BUILD_SHA ?= $(shell git rev-parse --short HEAD)
 BUILD_DATE ?= $(shell date -u +"%Y-%m-%d")
 
+GOVERSION ?= v1.17
+
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 GOHOSTOS ?= $(shell go env GOHOSTOS)
@@ -35,7 +37,7 @@ PUBLISH_JOBS := $(addprefix publish-,${ENVS})
 
 go.mod go.sum: $(GO_SRCS)
 	go mod download
-	go mod tidy
+	go mod tidy -compat=$(GOVERSION)
 
 .PHONY: build-local
 build-local: ## Build the plugin

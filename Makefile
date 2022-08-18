@@ -518,7 +518,7 @@ modules: ## Runs go mod to ensure modules are up to date.
 	@for i in $(GO_MODULES); do \
 		echo "-- Tidying $$i --"; \
 		pushd $${i}; \
-		$(GO) mod tidy || exit 1; \
+		$(GO) mod tidy -compat=$(GOVERSION)|| exit 1; \
 		popd; \
 	done
 

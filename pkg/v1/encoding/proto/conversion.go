@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/ghodss/yaml"
-	"github.com/golang/protobuf/jsonpb" // nolint
-	"github.com/golang/protobuf/proto"  // nolint
+	"google.golang.org/protobuf/encoding/protojson" // nolint
+	"google.golang.org/protobuf/proto"              // nolint
 
 	"github.com/vmware-tanzu/tanzu-framework/pkg/v1/cli/component"
 )
@@ -50,7 +50,7 @@ func BufferToProto(buf *bytes.Buffer, message proto.Message, format string) erro
 
 // jsonUnmarshal will unmarshal json bytes to a protocol buffer message.
 func jsonUnmarshal(buf *bytes.Buffer, message proto.Message) error {
-	err := jsonpb.Unmarshal(buf, message)
+	err := protojson.Unmarshal(buf.Bytes(), message)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func yamlUnmarshal(buf *bytes.Buffer, message proto.Message) error {
 	if err != nil {
 		return err
 	}
-	err = jsonpb.UnmarshalString(string(jsonBytes), message)
+	err = protojson.Unmarshal(jsonBytes, message)
 	if err != nil {
 		return err
 	}
