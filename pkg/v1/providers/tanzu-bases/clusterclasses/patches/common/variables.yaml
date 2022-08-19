@@ -1,0 +1,58 @@
+  - name: imageRepository
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          host:
+            type: string
+          tlsCertificateValidation:
+            type: boolean
+            default: true
+  - name: trust
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: array
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+            data:
+              type: string
+          required:
+          - name
+          - data
+  - name: auditLogging
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          enabled:
+            type: boolean
+            default: false
+        required:
+        - enabled
+        default:
+          enabled: false
+  - name: nodePoolLabels
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: array
+        items:
+          type: object
+          properties:
+            key:
+              type: string
+            value:
+              type: string
+        default: []
+  - name: TKR_DATA
+    required: false
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties: {}

@@ -24,4 +24,34 @@ directories:
       - v0.13.0-dev.2-152-g93347cfd
     path: .
   path: ytt/vendir/kapp-controller/_ytt_lib
+- contents:
+  - githubRelease:
+      tag: v1.2.1
+      url: https://api.github.com/repos/kubernetes-sigs/cluster-api/releases/74315839
+    path: .
+  path: upstream/cluster-api
+- contents:
+  - githubRelease:
+      tag: v1.5.0
+      url: https://api.github.com/repos/kubernetes-sigs/cluster-api-provider-aws/releases/73918400
+    path: .
+  path: upstream/cluster-api-provider-aws
+- contents:
+  - githubRelease:
+      tag: v1.4.1
+      url: https://api.github.com/repos/kubernetes-sigs/cluster-api-provider-azure/releases/74249192
+    path: .
+  path: upstream/cluster-api-provider-azure
+- contents:
+  - githubRelease:
+      tag: v1.3.1
+      url: https://api.github.com/repos/kubernetes-sigs/cluster-api-provider-vsphere/releases/71837519
+    path: .
+  path: upstream/cluster-api-provider-vsphere
+- contents:
+  - githubRelease:
+      tag: v0.4.0
+      url: https://api.github.com/repos/oracle/cluster-api-provider-oci/releases/72748172
+    path: .
+  path: upstream/cluster-api-provider-oracle
 kind: LockConfig

@@ -1,0 +1,11 @@
+#@ load("@ytt:overlay", "overlay")
+
+#@overlay/match by=overlay.subset({"kind":"Deployment"})
+#@overlay/merge
+---
+spec:
+  template:
+    spec:
+      containers:
+      #@overlay/match by=overlay.all
+      - image: registry.tkg.vmware.run/cluster-api-aws/cluster-api-aws-controller:${CAPA_CONTROLLER_IMAGE_TAG}

@@ -1,0 +1,31 @@
+providers:
+- name: infrastructure-aws
+  source: cluster-api-provider-aws
+  version: v1.5.0
+  componentManifest:
+    source: infrastructure-components.yaml
+# - name: infrastructure-azure
+#   source: cluster-api-provider-azure
+#   component-manifest:
+#     source: infrastructure-components.yaml
+# - name: infrastructure-vsphere
+#   source: cluster-api-provider-vsphere
+#   component-manifest:
+#     source: infrastructure-components.yaml
+# - name: infrastructure-oci
+#   source: cluster-api-provider-oci
+#   component-manifest: infrastructure-components.yaml
+# - name: infrastructure-docker
+#   source: cluster-api
+#   component-manifest:
+#     source: infrastructure-components-development.yaml
+#     target: infrastructure-components.yaml
+# - name: cluster-api
+#   source: cluster-api
+#   component-manifest: core-components.yaml
+# - name: bootstrap-kubeadm
+#   source: cluster-api
+#   component-manifest: bootstrap-components.yaml
+# - name: control-plane-kubeadm
+#   source: cluster-api
+#   component-manifest: control-plane-components.yaml

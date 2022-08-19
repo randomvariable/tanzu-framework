@@ -26,3 +26,48 @@ directories:
       ref: 93347cfd85455c47fc7670d16abe652e1209dab9
     includePaths:
     - addons/packages/kapp-controller/0.38.4/bundle/config/**/*
+- path: upstream/cluster-api
+  contents:
+  - path: .
+    githubRelease:
+      disableAutoChecksumValidation: true
+      slug: kubernetes-sigs/cluster-api
+      tag: v1.2.1
+      assetNames:
+      - "*.yaml"
+- path: upstream/cluster-api-provider-aws
+  contents:
+  - path: .
+    githubRelease:
+      disableAutoChecksumValidation: true
+      slug: kubernetes-sigs/cluster-api-provider-aws
+      tag: v1.5.0
+      assetNames:
+      - "*.yaml"
+- path: upstream/cluster-api-provider-azure
+  contents:
+  - path: .
+    githubRelease:
+      disableAutoChecksumValidation: true
+      slug: kubernetes-sigs/cluster-api-provider-azure
+      tag: v1.4.1
+      assetNames:
+      - "*.yaml"
+- path: upstream/cluster-api-provider-vsphere
+  contents:
+  - path: .
+    githubRelease:
+      disableAutoChecksumValidation: true
+      slug: kubernetes-sigs/cluster-api-provider-vsphere
+      tag: v1.3.1
+      assetNames:
+      - "*.yaml"
+- path: upstream/cluster-api-provider-oracle
+  contents:
+  - path: .
+    githubRelease:
+      disableAutoChecksumValidation: true
+      slug: oracle/cluster-api-provider-oci
+      tag: v0.4.0
+      assetNames:
+      - "*.yaml"

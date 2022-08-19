@@ -1,0 +1,17 @@
+#@ load("@ytt:overlay", "overlay")
+
+#@overlay/match by=overlay.subset({"kind":"Deployment"})
+#@overlay/merge
+---
+spec:
+  template:
+    spec:
+      containers:
+      #@overlay/match by=overlay.all
+      - env:
+        - name: HTTP_PROXY
+          value: ${TKG_HTTP_PROXY}
+        - name: HTTPS_PROXY
+          value: ${TKG_HTTPS_PROXY}
+        - name: NO_PROXY
+          value: ${TKG_NO_PROXY}

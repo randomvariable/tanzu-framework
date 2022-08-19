@@ -1,0 +1,128 @@
+ - name: customizedImageRepo
+    enabledIf: '{{ not (empty .imageRepository.host) }}'
+    definitions:
+    - selector:
+        apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+        kind: KubeadmControlPlaneTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+        valueFrom:
+          template: |
+            sed -i 's|".*/pause|" {{- or .imageRepository.host (index .TKR_DATA .builtin.controlPlane.version).kubernetesSpec.imageRepository -}} /pause|' /etc/containerd/config.toml
+    - selector:
+        apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+        kind: KubeadmConfigTemplate
+        matchResources:
+          machineDeploymentClass:
+            names:
+            - tkg-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/preKubeadmCommands/-
+        valueFrom:
+          template: |
+            sed -i 's|".*/pause|" {{- or .imageRepository.host (index .TKR_DATA .builtin.machineDeployment.version).kubernetesSpec.imageRepository -}} /pause|' /etc/containerd/config.toml
+  - name: registryCACert
+    enabledIf: '{{ not (empty .trust) }}'
+    definitions:
+    - selector:
+        apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+        kind: KubeadmControlPlaneTemplate
+        matchResources:
+          controlPlane: true
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+        valueFrom:
+          template: |
+            {{- $host := index (or .imageRepository.host (index .TKR_DATA .builtin.controlPlane.version).kubernetesSpec.imageRepository | splitList "/") 0 -}}
+            echo '[plugins."io.containerd.grpc.v1.cri".registry.configs." {{- $host -}} ".tls]' >> /etc/containerd/config.toml
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+        valueFrom:
+          template: |
+            {{- $host := index (or .imageRepository.host (index .TKR_DATA .builtin.controlPlane.version).kubernetesSpec.imageRepository | splitList "/") 0 }}
+            {{- $val := list "ca_file = \"/etc/containerd/" $host ".crt\"" | join "" }}
+            {{- with .imageRepository }}
+              {{- if .tlsCertificateValidation | eq false }}
+                {{- $val = "insecure_skip_verify = true" }}
+              {{- end }}
+            {{- end -}}
+            {{- define "echo" -}}
+              echo '  {{ . -}} ' >> /etc/containerd/config.toml
+            {{- end }}
+            {{- template "echo" $val -}}
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+        value: systemctl restart containerd
+      - op: add
+        path: /spec/template/spec/kubeadmConfigSpec/files/-
+        valueFrom:
+          template: |
+            path: /etc/containerd/ {{- index (or .imageRepository.host (index .TKR_DATA .builtin.controlPlane.version).kubernetesSpec.imageRepository | splitList "/") 0 -}} .crt
+            {{- $proxy := "" }}
+            {{- $image := "" }}
+            {{- range .trust }}
+              {{- if eq .name "proxy" }}
+                {{- $proxy = .data }}
+              {{- end }}
+              {{- if eq .name "imageRepository" }}
+                {{- $image = .data }}
+              {{- end }}
+            {{- end }}
+            content: {{or $proxy $image}}
+            encoding: base64
+            permissions: "0444"
+    - selector:
+        apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+        kind: KubeadmConfigTemplate
+        matchResources:
+          machineDeploymentClass:
+            names:
+            - tkg-worker
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/preKubeadmCommands/-
+        valueFrom:
+          template: |
+            {{- $host := index (or .imageRepository.host (index .TKR_DATA .builtin.machineDeployment.version).kubernetesSpec.imageRepository | splitList "/") 0 -}}
+            echo '[plugins."io.containerd.grpc.v1.cri".registry.configs." {{- $host -}} ".tls]' >> /etc/containerd/config.toml
+      - op: add
+        path: /spec/template/spec/preKubeadmCommands/-
+        valueFrom:
+          template: |
+            {{- $host := index (or .imageRepository.host (index .TKR_DATA .builtin.machineDeployment.version).kubernetesSpec.imageRepository | splitList "/") 0 }}
+            {{- $val := list "ca_file = \"/etc/containerd/" $host ".crt\"" | join "" }}
+            {{- with .imageRepository }}
+              {{- if .tlsCertificateValidation | eq false }}
+                {{- $val = "insecure_skip_verify = true" }}
+              {{- end }}
+            {{- end -}}
+            {{- define "echo" -}}
+              echo '  {{ . -}} ' >> /etc/containerd/config.toml
+            {{- end }}
+            {{- template "echo" $val -}}
+      - op: add
+        path: /spec/template/spec/preKubeadmCommands/-
+        value: systemctl restart containerd
+      - op: add
+        path: /spec/template/spec/files/-
+        valueFrom:
+          template: |
+            path: /etc/containerd/{{ index (or .imageRepository.host (index .TKR_DATA .builtin.machineDeployment.version).kubernetesSpec.imageRepository | splitList "/") 0 }}.crt
+            {{- $proxy := "" }}
+            {{- $image := "" }}
+            {{- range .trust }}
+              {{- if eq .name "proxy" }}
+                {{- $proxy = .data }}
+              {{- end }}
+              {{- if eq .name "imageRepository" }}
+                {{- $image = .data }}
+              {{- end }}
+            {{- end }}
+            content: {{or $proxy $image}}
+            encoding: base64
+            permissions: "0444"

@@ -1,0 +1,26 @@
+      jsonPatches:
+      - op: add
+        path: /spec/template/spec/joinConfiguration/nodeRegistration/kubeletExtraArgs/node-labels
+        valueFrom:
+          template: |
+            {{ $first := true }}
+            {{- range $key, $val := (index .TKR_DATA .builtin.machineDeployment.version).labels }}
+            {{- if $first }}
+              {{- $first = false }}
+            {{- else -}}
+              ,
+            {{- end }}
+            {{- $key -}} = {{- $val }}
+            {{- end}}
+            {{- if .nodePoolLabels -}}
+              ,
+              {{- $first := true }}
+              {{- range .nodePoolLabels }}
+                {{- if $first }}
+                  {{- $first = false }}
+                {{- else -}}
+                  ,
+                {{- end }}
+                {{- .key -}} = {{- .value -}}
+              {{ end }}
+            {{ end }}
