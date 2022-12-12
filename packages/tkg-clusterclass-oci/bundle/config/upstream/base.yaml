@@ -38,94 +38,57 @@ spec:
       kind: OCIClusterTemplate
       name: #@ "tkg-oci-default-{}-cluster-template".format(data.values.OCI_CLUSTER_CLASS_VERSION)
   variables:
-    - name: sshKey
+    - name: sshPublicKey
       required: false
       schema:
         openAPIV3Schema:
           type: string
           default: default
-    - name: privateServiceSubnetId
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-          default: ""
-    - name: compartmentId
+    - name: compartmentID
       required: true
       schema:
         openAPIV3Schema:
           type: string
-    - name: externalVCNId
-      required: false
+    - name: network
+      required: true
       schema:
         openAPIV3Schema:
-          type: string
-    - name: externalControlPlaneEndpointNSGId
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-    - name: externalControlPlaneNSGId
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-    - name: externalWorkerNSGId
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-    - name: externalControlPlaneEndpointSubnetId
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-    - name: externalControlPlaneSubnetId
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-    - name: externalWorkerSubnetId
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-    - name: nodeMachineShape
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-          default: VM.Standard.E4.Flex
-    - name: nodeMachineOcpus
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-          default: "1"
-    - name: controlPlaneMachineShape
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-          default: VM.Standard.E4.Flex
-    - name: controlPlaneMachineOcpus
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: string
-          default: "1"
-    - name: nodePvTransitEncryption
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: boolean
-          default: true
-    - name: controlPlanePvTransitEncryption
-      required: false
-      schema:
-        openAPIV3Schema:
-          type: boolean
-          default: true
+          type: object
+          properties:
+            vcnID:
+              type: string
+            securityGroupIDs:
+              openAPIV3Schema:
+                type: object
+                properties:
+                  controlPlaneEndpoint:
+                    type: string
+                    required: true
+                  controlPlane:
+                    type: string
+                    required: true
+                  workers:
+                    type: string
+                    required: true
+            subnetIDs:
+              openAPIV3Schema:
+                type: object
+                properties:
+                  controlPlaneEndpoint:
+                    type: string
+                    required: true
+                  workers:
+                    type: string
+                    required: true
+                  controlPlane:
+                    type: string
+                    required: true
+                  privateServices:
+                    type: string
+                    required: true
+                  publicServices:
+                    type: string
+                    required: false
     - name: imageRepository
       required: false
       schema:
@@ -137,16 +100,33 @@ spec:
             tlsCertificateValidation:
               type: boolean
               default: true
+    - name: controlPlaneMachineSpec
+      required: false
+      schema: &MachineSpec
+        openAPIV3Schema:
+          type: object
+          properties:
+            shape:
+              type: string
+              default: VM.Standard.E4.Flex
+            oCPUs:
+              type: string
+              default: 1
+    - name: workerMachineSpec
+      required: false
+      schema: *MachineSpec
+    - name: rootVolumeEncryptionEnabled
+      required: false
+      schema:
+        openAPIV3Schema:
+          type: boolean
+          default: true
     - name: cni
       required: true
       schema:
         openAPIV3Schema:
           type: string
-          #@ if data.values.CNI:
-          default: #@ data.values.CNI
-          #@ else:
-          default: ""
-          #@ end
+          default: antrea
     - name: trust
       required: false
       schema:
@@ -202,34 +182,9 @@ spec:
             activate: true
             daysBefore: 90
   patches:
-    - name: compartmentId
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIClusterTemplate
-            matchResources:
-              infrastructureCluster: true
-          jsonPatches:
-            - op: add
-              path: "/spec/template/spec/compartmentId"
-              valueFrom:
-                variable: compartmentId
     #! JSON Patches for externally managed cluster infrastructure
     #! these patches are only enabled if a non-empty externalVCNId variable is specified
-    - name: skipNetworkManagement
-      enabledIf: '{{ not (empty .externalVCNId) }}'
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIClusterTemplate
-            matchResources:
-              infrastructureCluster: true
-          jsonPatches:
-            - op: add
-              path: "/spec/template/spec/networkSpec/skipNetworkManagement"
-              value: true
-    - name: externalVCNId
-      enabledIf: '{{ not (empty .externalVCNId) }}'
+    - name: OracleClusterSpec
       definitions:
         - selector:
             apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
@@ -240,81 +195,38 @@ spec:
             - op: add
               path: "/spec/template/spec/networkSpec/vcn/id"
               valueFrom:
-                variable: externalVCNId
-    - name: externalNetworkSecurityGroups
-      enabledIf: '{{ not (empty .externalVCNId) }}'
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIClusterTemplate
-            matchResources:
-              infrastructureCluster: true
-          jsonPatches:
+                variable: network.VCNID
+            - op: add
+              path: "/spec/template/spec/compartmentId"
+              valueFrom:
+                variable: compartmentID
             - op: replace
               path: "/spec/template/spec/networkSpec/vcn/networkSecurityGroups"
               valueFrom:
                 template: |
-                  - id: {{ .externalControlPlaneEndpointNSGId }}
+                  - id: {{ .network.securityGroupIDs.controlPlaneEndpoint }}
                     role: control-plane-endpoint
                     name: control-plane-endpoint
-                  - id: {{ .externalWorkerNSGId }}
+                  - id: {{ .network.securityGroupIDs.workers }}
                     role: worker
                     name: worker
-                  - id: {{ .externalControlPlaneNSGId }}
+                  - id: {{ .network.securityGroupIDs.controlPlane }}
                     role: control-plane
                     name: control-plane
-    - name: externalSubnets
-      enabledIf: '{{ not (empty .externalVCNId) }}'
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIClusterTemplate
-            matchResources:
-              infrastructureCluster: true
-          jsonPatches:
-            - op: add
+            - op: replace
               path: "/spec/template/spec/networkSpec/vcn/subnets"
               valueFrom:
                 template: |
-                  - id: {{ .externalControlPlaneEndpointSubnetId }}
+                  - id: {{ .network.subnetIDs.controlPlaneEndpoint }}
                     role: control-plane-endpoint
                     name: control-plane-endpoint
-                  - id: {{ .externalWorkerSubnetId }}
+                  - id: {{ .network.subnetIDs.workers }}
                     role: worker
                     name: worker
-                  - id: {{ .externalControlPlaneSubnetId }}
+                  - id: {{ .network.subnetIDs.controlPlane }}
                     role: control-plane
                     name: control-plane
-    - name: sshAuthorizedKeys
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIMachineTemplate
-            matchResources:
-              controlPlane: true
-              machineDeploymentClass:
-                names:
-                  - tkg-worker
-          jsonPatches:
-            - op: add
-              path: "/spec/template/spec/metadata/ssh_authorized_keys"
-              valueFrom:
-                variable: sshKey
-    - name: nodeShape
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIMachineTemplate
-            matchResources:
-              machineDeploymentClass:
-                names:
-                  - tkg-worker
-          jsonPatches:
-            - op: replace
-              path: "/spec/template/spec/shape"
-              valueFrom:
-                variable: nodeMachineShape
-    - name: controlPlaneMachineShape
+    - name: OracleSpecificControlPlaneMachineeConfiguration
       definitions:
         - selector:
             apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
@@ -322,23 +234,32 @@ spec:
             matchResources:
               controlPlane: true
           jsonPatches:
-            - op: add
-              path: "/spec/template/spec/shape"
+            - &OCPUsPatch
+              op: add
+              path: /spec/template/spec/shapeConfig/ocpus
               valueFrom:
-                variable: controlPlaneMachineShape
-    - name: controlPlaneImageId
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIMachineTemplate
-            matchResources:
-              controlPlane: true
-          jsonPatches:
-            - op: add
+                variable: controlPlaneMachineOCPUs
+            - &PvTransitEncryption
+              op: add
+              path: "/spec/template/spec/isPvEncryptionInTransitEnabled"
+              valueFrom:
+                variable: rootVolumeEncryption
+            - &ImageID
+              op: add
               path: "/spec/template/spec/imageId"
               valueFrom:
                 template: '{{ (index .TKR_DATA .builtin.controlPlane.version).osImageRef.id }}'
-    - name: workerImageId
+            - &MachineShape
+              op: add
+              path: "/spec/template/spec/shape"
+              valueFrom:
+                variable: controlPlaneMachineShape
+            - &sshPublicKey
+              op: add
+              path: "/spec/template/spec/metadata/ssh_authorized_keys"
+              valueFrom:
+                variable: sshPublicKey
+    - name: OracleSpecificWorkerMachineConfiguration
       definitions:
         - selector:
             apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
@@ -348,62 +269,17 @@ spec:
                 names:
                   - tkg-worker
           jsonPatches:
-            - op: add
-              path: "/spec/template/spec/imageId"
-              valueFrom:
+            - <<: *OCPUsPatch
+              valueFrom: #@yaml/map-key-override
+                variable: workerMachineOCPUs
+            - *PvTransitEncryption
+            - <<: *ImageID
+              valueFrom: #@yaml/map-key-override
                 template: '{{ (index .TKR_DATA .builtin.machineDeployment.version).osImageRef.id }}'
-    - name: nodeIsPvEncryptionInTransitEnabled
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIMachineTemplate
-            matchResources:
-              machineDeploymentClass:
-                names:
-                  - tkg-worker
-          jsonPatches:
-            - op: add
-              path: "/spec/template/spec/isPvEncryptionInTransitEnabled"
-              valueFrom:
-                variable: nodePvTransitEncryption
-    - name: controlPlaneIsPvEncryptionInTransitEnabled
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIMachineTemplate
-            matchResources:
-              controlPlane: true
-          jsonPatches:
-            - op: add
-              path: "/spec/template/spec/isPvEncryptionInTransitEnabled"
-              valueFrom:
-                variable: controlPlanePvTransitEncryption
-    - name: nodeOcpus
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIMachineTemplate
-            matchResources:
-              machineDeploymentClass:
-                names:
-                  - tkg-worker
-          jsonPatches:
-            - op: add
-              path: /spec/template/spec/shapeConfig/ocpus
-              valueFrom:
-                variable: nodeMachineOcpus
-    - name: controlPlaneOcpus
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: OCIMachineTemplate
-            matchResources:
-              controlPlane: true
-          jsonPatches:
-            - op: add
-              path: /spec/template/spec/shapeConfig/ocpus
-              valueFrom:
-                variable: controlPlaneMachineOcpus
+            - <<: *MachineShape
+              valueFrom: #@yaml/map-key-override
+                variable: nodeMachineShape
+            - *sshPublicKey
     - name: apiServerBindPort
       enabledIf: '{{ not (empty .apiServerPort) }}'
       definitions:
@@ -426,7 +302,7 @@ spec:
                   localAPIEndpoint:
                     advertiseAddress: '0.0.0.0'
                     bindPort: {{ .apiServerPort }}
-    - name: OCI_KCPT
+    - name: TKROpenContainerImageReplacements
       definitions:
         - selector:
             apiVersion: controlplane.cluster.x-k8s.io/v1beta1
@@ -495,6 +371,267 @@ spec:
               valueFrom:
                 template: |
                   certificatesExpiryDays: {{ .controlPlaneCertificateRotation.daysBefore }}
+    - name: httpProxy
+      enabledIf: '{{ not (empty .proxy) }}'
+      definitions:
+      - selector:
+          apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+          kind: KubeadmControlPlaneTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/files/-
+          valueFrom:
+            template: &containerdProxyConf |
+              content: |
+                [Service]
+                Environment="HTTP_PROXY= {{- .proxy.httpProxy -}} "
+                Environment="HTTPS_PROXY= {{- .proxy.httpsProxy -}} "
+                Environment="NO_PROXY= {{- list "localhost" "127.0.0.1" ".svc" ".svc.cluster.local" ((list "IPv6" "DualStack" | has .builtin.cluster.network.ipFamily) | ternary  "::1" nil) | concat .proxy.noProxy .builtin.cluster.network.services .builtin.cluster.network.pods | uniq | sortAlpha | join "," -}} "
+              owner: root:root
+              path: /etc/systemd/system/containerd.service.d/http-proxy.conf
+              permissions: "0640"
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/files/-
+          valueFrom:
+            template: &kubeletProxyConf |
+              content: |
+                [Service]
+                Environment="HTTP_PROXY= {{- .proxy.httpProxy -}} "
+                Environment="HTTPS_PROXY= {{- .proxy.httpsProxy -}} "
+                Environment="NO_PROXY= {{- list "localhost" "127.0.0.1" ".svc" ".svc.cluster.local" ((list "IPv6" "DualStack" | has .builtin.cluster.network.ipFamily) | ternary  "::1" nil) | concat .proxy.noProxy .builtin.cluster.network.services .builtin.cluster.network.pods | uniq | sortAlpha | join "," -}} "
+              owner: root:root
+              path: /usr/lib/systemd/system/kubelet.service.d/http-proxy.conf
+              permissions: "0640"
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          value: systemctl daemon-reload
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          value: systemctl stop containerd
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          value: systemctl start containerd
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          valueFrom:
+            template: &exportHTTPProxy |
+              export HTTP_PROXY= {{- .proxy.httpProxy }}
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          valueFrom:
+            template: &exportHTTPSProxy |
+              export HTTPS_PROXY= {{- .proxy.httpsProxy }}
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          valueFrom:
+            template: &exportNoProxy |
+              export NO_PROXY= {{- list "localhost" "127.0.0.1" ".svc" ".svc.cluster.local" ((list "IPv6" "DualStack" | has .builtin.cluster.network.ipFamily) | ternary  "::1" nil) | concat .proxy.noProxy .builtin.cluster.network.services .builtin.cluster.network.pods | uniq | sortAlpha | join "," }}
+      - selector:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          matchResources:
+            machineDeploymentClass:
+              names:
+              - tkg-worker
+        jsonPatches:
+        - op: add
+          path: /spec/template/spec/files/-
+          valueFrom:
+            template: *containerdProxyConf
+        - op: add
+          path: /spec/template/spec/files/-
+          valueFrom:
+            template: *kubeletProxyConf
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          value: systemctl daemon-reload
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          value: systemctl restart containerd
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          valueFrom:
+            template: *exportHTTPProxy
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          valueFrom:
+            template: *exportHTTPSProxy
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          valueFrom:
+            template: *exportNoProxy
+    - name: httpProxyCACert
+      enabledIf: '{{ $hasProxyCert := false }} {{- range .trust.additionalTrustedCAs }} {{- if .name | eq "proxy" }} {{- $hasProxyCert = true }} {{- end }} {{- end }} {{- $hasProxyCert }}'
+      definitions:
+      - selector:
+          apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+          kind: KubeadmControlPlaneTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          value: '! which rehash_ca_certificates.sh 2>/dev/null || rehash_ca_certificates.sh'
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          value: '! which update-ca-certificates 2>/dev/null || (mv /etc/ssl/certs/tkg-custom-ca.pem /usr/local/share/ca-certificates/tkg-custom-ca.crt && update-ca-certificates)'
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          value: '! which update-ca-trust 2>/dev/null || (update-ca-trust force-enable && mv /etc/ssl/certs/tkg-custom-ca.pem /etc/pki/ca-trust/source/anchors/tkg-custom-ca.crt && update-ca-trust extract)'
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          value: systemctl restart containerd
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/files/-
+          valueFrom:
+            template: |
+              path: /etc/ssl/certs/tkg-custom-ca.pem
+              {{- $proxy := "" }}
+              {{- range .trust.additionalTrustedCAs }}
+                {{- if eq .name "proxy" }}
+                  {{- $proxy = .data }}
+                {{- end }}
+              {{- end }}
+              content: {{ $proxy }}
+              encoding: base64
+              permissions: "0444"
+      - selector:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          matchResources:
+            machineDeploymentClass:
+              names:
+              - tkg-worker
+        jsonPatches:
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          value: '! which rehash_ca_certificates.sh 2>/dev/null || rehash_ca_certificates.sh'
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          value: '! which update-ca-certificates 2>/dev/null || (mv /etc/ssl/certs/tkg-custom-ca.pem /usr/local/share/ca-certificates/tkg-custom-ca.crt && update-ca-certificates)'
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          value: '! which update-ca-trust 2>/dev/null || (update-ca-trust force-enable && mv /etc/ssl/certs/tkg-custom-ca.pem /etc/pki/ca-trust/source/anchors/tkg-custom-ca.crt && update-ca-trust extract)'
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          value: systemctl restart containerd
+        - op: add
+          path: /spec/template/spec/files/-
+          valueFrom:
+            template: |
+              path: /etc/ssl/certs/tkg-custom-ca.pem
+              {{- $proxy := "" }}
+              {{- range .trust.additionalTrustedCAs }}
+                {{- if eq .name "proxy" }}
+                  {{- $proxy = .data }}
+                {{- end }}
+              {{- end }}
+              content: {{ $proxy }}
+              encoding: base64
+              permissions: "0444"
+    - name: registryCACert
+      enabledIf: '{{ not (empty .trust.additionalTrustedCAs) }}'
+      definitions:
+      - selector:
+          apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+          kind: KubeadmControlPlaneTemplate
+          matchResources:
+            controlPlane: true
+        jsonPatches:
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          valueFrom:
+            template: |
+              {{- $host := index (or .imageRepository.host (index .TKR_DATA .builtin.controlPlane.version).kubernetesSpec.imageRepository | splitList "/") 0 -}}
+              echo '[plugins."io.containerd.grpc.v1.cri".registry.configs." {{- $host -}} ".tls]' >> /etc/containerd/config.toml
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          valueFrom:
+            template: |
+              {{- $host := index (or .imageRepository.host (index .TKR_DATA .builtin.controlPlane.version).kubernetesSpec.imageRepository | splitList "/") 0 }}
+              {{- $val := list "ca_file = \"/etc/containerd/" $host ".crt\"" | join "" }}
+              {{- with .imageRepository }}
+                {{- if .tlsCertificateValidation | eq false }}
+                  {{- $val = "insecure_skip_verify = true" }}
+                {{- end }}
+              {{- end -}}
+              {{- define "echo" -}}
+                echo '  {{ . -}} ' >> /etc/containerd/config.toml
+              {{- end }}
+              {{- template "echo" $val -}}
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/preKubeadmCommands/-
+          value: systemctl restart containerd
+        - op: add
+          path: /spec/template/spec/kubeadmConfigSpec/files/-
+          valueFrom:
+            template: |
+              path: /etc/containerd/ {{- index (or .imageRepository.host (index .TKR_DATA .builtin.controlPlane.version).kubernetesSpec.imageRepository | splitList "/") 0 -}} .crt
+              {{- $proxy := "" }}
+              {{- $image := "" }}
+              {{- range .trust.additionalTrustedCAs }}
+                {{- if eq .name "proxy" }}
+                  {{- $proxy = .data }}
+                {{- end }}
+                {{- if eq .name "imageRepository" }}
+                  {{- $image = .data }}
+                {{- end }}
+              {{- end }}
+              content: {{or $proxy $image}}
+              encoding: base64
+              permissions: "0444"
+      - selector:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          matchResources:
+            machineDeploymentClass:
+              names:
+              - tkg-worker
+        jsonPatches:
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          valueFrom:
+            template: |
+              {{- $host := index (or .imageRepository.host (index .TKR_DATA .builtin.machineDeployment.version).kubernetesSpec.imageRepository | splitList "/") 0 -}}
+              echo '[plugins."io.containerd.grpc.v1.cri".registry.configs." {{- $host -}} ".tls]' >> /etc/containerd/config.toml
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          valueFrom:
+            template: |
+              {{- $host := index (or .imageRepository.host (index .TKR_DATA .builtin.machineDeployment.version).kubernetesSpec.imageRepository | splitList "/") 0 }}
+              {{- $val := list "ca_file = \"/etc/containerd/" $host ".crt\"" | join "" }}
+              {{- with .imageRepository }}
+                {{- if .tlsCertificateValidation | eq false }}
+                  {{- $val = "insecure_skip_verify = true" }}
+                {{- end }}
+              {{- end -}}
+              {{- define "echo" -}}
+                echo '  {{ . -}} ' >> /etc/containerd/config.toml
+              {{- end }}
+              {{- template "echo" $val -}}
+        - op: add
+          path: /spec/template/spec/preKubeadmCommands/-
+          value: systemctl restart containerd
+        - op: add
+          path: /spec/template/spec/files/-
+          valueFrom:
+            template: |
+              path: /etc/containerd/{{ index (or .imageRepository.host (index .TKR_DATA .builtin.machineDeployment.version).kubernetesSpec.imageRepository | splitList "/") 0 }}.crt
+              {{- $proxy := "" }}
+              {{- $image := "" }}
+              {{- range .trust.additionalTrustedCAs }}
+                {{- if eq .name "proxy" }}
+                  {{- $proxy = .data }}
+                {{- end }}
+                {{- if eq .name "imageRepository" }}
+                  {{- $image = .data }}
+                {{- end }}
+              {{- end }}
+              content: {{or $proxy $image}}
+              encoding: base64
+              permissions: "0444"
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OCIClusterTemplate
@@ -507,219 +644,9 @@ spec:
       networkSpec:
         vcn:
           cidr: "10.0.0.0/16"
+          skipNetworkManagement: true
           subnets:
           networkSecurityGroups:
-            - egressRules:
-                - egressRule:
-                    description: Control Plane Nodes access to Internet
-                    destination: 0.0.0.0/0
-                    destinationType: CIDR_BLOCK
-                    isStateless: false
-                    protocol: all
-              ingressRules:
-                - ingressRule:
-                    description: Kubernetes API endpoint to Kubernetes control plane node(apiserver
-                      port) communication
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.0.8/29
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 6443
-                        min: 6443
-                - ingressRule:
-                    description: Control plane node to control plane node(apiserver port)
-                      communication
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.0.0/29
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 6443
-                        min: 6443
-                - ingressRule:
-                    description: Worker Node to Kubernetes control plane node(apiserver port)
-                      communication
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.64.0/20
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 6443
-                        min: 6443
-                - ingressRule:
-                    description: etcd client communication
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.0.0/29
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 2379
-                        min: 2379
-                - ingressRule:
-                    description: etcd peer
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.0.0/29
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 2380
-                        min: 2380
-                - ingressRule:
-                    description: Antrea Service
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.0.0/29
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 10349
-                        min: 10349
-                - ingressRule:
-                    description: Antrea Service
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.64.0/20
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 10349
-                        min: 10349
-                - ingressRule:
-                    description: Geneve Service
-                    isStateless: false
-                    protocol: "17"
-                    source: 10.0.0.0/29
-                    sourceType: CIDR_BLOCK
-                    udpOptions:
-                      destinationPortRange:
-                        max: 6081
-                        min: 6081
-                - ingressRule:
-                    description: Geneve Service
-                    isStateless: false
-                    protocol: "17"
-                    source: 10.0.64.0/20
-                    sourceType: CIDR_BLOCK
-                    udpOptions:
-                      destinationPortRange:
-                        max: 6081
-                        min: 6081
-                - ingressRule:
-                    description: Path discovery
-                    icmpOptions:
-                      code: 3
-                      type: 3
-                    isStateless: false
-                    protocol: "1"
-                    source: 10.0.0.0/16
-                    sourceType: CIDR_BLOCK
-                - ingressRule:
-                    description: Inbound SSH traffic to control plane nodes
-                    isStateless: false
-                    protocol: "6"
-                    source: 0.0.0.0/0
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 22
-                        min: 22
-                - ingressRule:
-                    description: Control Plane to Control Plane Kubelet Communication
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.0.0/29
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 10250
-                        min: 10250
-              name: control-plane
-              role: control-plane
-            - egressRules:
-                - egressRule:
-                    description: Worker Nodes access to Internet
-                    destination: 0.0.0.0/0
-                    destinationType: CIDR_BLOCK
-                    isStateless: false
-                    protocol: all
-              ingressRules:
-                - ingressRule:
-                    description: Inbound SSH traffic to worker nodes
-                    isStateless: false
-                    protocol: "6"
-                    source: 0.0.0.0/0
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 22
-                        min: 22
-                - ingressRule:
-                    description: Path discovery
-                    icmpOptions:
-                      code: 3
-                      type: 3
-                    isStateless: false
-                    protocol: "1"
-                    source: 10.0.0.0/16
-                    sourceType: CIDR_BLOCK
-                - ingressRule:
-                    description: Control plane nodes to worker node Kubelet Communication
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.0.0/29
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 10250
-                        min: 10250
-                - ingressRule:
-                    description: Worker nodes to worker node Kubelet Communication
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.64.0/20
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 10250
-                        min: 10250
-                - ingressRule:
-                    description: Geneve Service
-                    isStateless: false
-                    protocol: "17"
-                    source: 10.0.0.0/29
-                    sourceType: CIDR_BLOCK
-                    udpOptions:
-                      destinationPortRange:
-                        max: 6081
-                        min: 6081
-                - ingressRule:
-                    description: Geneve Service
-                    isStateless: false
-                    protocol: "17"
-                    source: 10.0.64.0/20
-                    sourceType: CIDR_BLOCK
-                    udpOptions:
-                      destinationPortRange:
-                        max: 6081
-                        min: 6081
-                - ingressRule:
-                    description: Worker node to default NodePort ingress communication
-                    isStateless: false
-                    protocol: "6"
-                    source: 10.0.64.0/20
-                    sourceType: CIDR_BLOCK
-                    tcpOptions:
-                      destinationPortRange:
-                        max: 32767
-                        min: 30000
-              name: worker
-              role: worker
 ---
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: KubeadmControlPlaneTemplate

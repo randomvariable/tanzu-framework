@@ -973,7 +973,6 @@ def get_vsphere_vars():
 end
 
 def get_oci_vars():
-
     simpleMapping = {}
     simpleMapping["OCI_COMPARTMENT_ID"] = "compartmentId"
     simpleMapping["OCI_SSH_KEY"] = "sshKey"
@@ -1009,5 +1008,5 @@ oci_var_keys = ["compartmentId", "sshKey", "nodeMachineShape", "nodeMachineOcpus
         "externalControlPlaneEndpointSubnetId", "externalControlPlaneSubnetId", "externalWorkerSubnetId",
         "nodePvTransitEncryption", "controlPlaneMachineShape", "controlPlaneMachineOcpus",
         "controlPlanePvTransitEncryption",
-        "imageRepository", "trust", "auditLogging", "cni", "TKR_DATA", 
+        "imageRepository", "trust", "auditLogging", "cni", "TKR_DATA",
         "controlPlaneCertificateRotation"]

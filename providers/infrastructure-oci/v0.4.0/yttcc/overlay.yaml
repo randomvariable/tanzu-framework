@@ -88,10 +88,43 @@ spec:
       #@ end
     #@overlay/match missing_ok=True
     variables:
-      #@ vars = get_oci_vars()
-      #@ for configVariable in vars:
-      #@  if vars[configVariable] != None and configVariable in oci_var_keys:
-      - name: #@ configVariable
-        value: #@ vars[configVariable]
-      #@  end
-      #@ end
+      - name: network
+        value:
+          vcnID: #@ data.values["OCI_VCN_ID"]
+          securityGroupIDs:
+            controlPlaneEndpoint: #@ data.values["OCI_CONTROL_PLANE_ENDPOINT_NSG_ID"]
+            controlPlane: #@ data.values["OCI_CONTROL_PLANE_NSG_ID"]
+            workers: #@ data.values["OCI_WORKERS_NSG_ID"]
+          subnetIDs:
+            controlPlaneEndpoint: #@ data.values["OCI_CONTROL_PLANE_SUBNET_ID"]
+            controlPlane: #@ data.values["OCI_CONTROL_PLANE_SUBNET_ID"]
+            privateServices: #@ data.values["OCI_PRIVATE_SERVICES_SUBNET_ID"]
+            publicServices: #@ data.values["OCI_PUBLIC_SERVICES_SUBNET_ID"]
+      - name: compartmentID
+        value: #@ data.values["OCI_COMPARTMENT_ID"]
+      - name: sshPublicKey
+        value: #@ data.values["OCI_SSH_PUBLIC_KEY_B64"]
+      - name: volumeInTransitEncryptionEnabled
+        value: #@ data.values["OCI_VOLUME_IN_TRANSIT_ENCRYPTION_ENABLED"]
+      - name: imageRepository
+        value:
+          host: ""
+          tlsCertificateValidation: true
+      - name: controlPlaneMachineSpec
+        value:
+          shape: #@ data.values["OCI_CONTROL_PLANE_MACHINE_SHAPE"]
+          oCPUs: #@ data.values["OCI_CONTROL_PLANE_MACHINE_OCPUS"]
+      - name: workerMachineSpec
+        value:
+          shape: #@ data.values["OCI_WORKER_MACHINE_SHAPE"]
+          oCPUs: #@ data.values["OCI_WORKER_MACHINE_OCPUS"]
+      - name: trust
+        value:
+          additionalTrustedCAs: []
+      - name: auditLogging
+        value:
+          enabled: false
+      - name: controlPlaneCertificateRotation
+        value:
+          activate: true
+          daysBefore: 90
