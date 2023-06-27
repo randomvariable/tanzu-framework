@@ -13,7 +13,6 @@ spec:
     strategy: Webhook
     webhook:
       clientConfig:
-        caBundle: Cg==
         service:
           name: tkr-conversion-webhook-service
           namespace: #@ data.values.namespace
