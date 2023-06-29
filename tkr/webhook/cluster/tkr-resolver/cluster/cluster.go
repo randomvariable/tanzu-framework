@@ -101,7 +101,7 @@ func (cw *Webhook) ResolveAndSetMetadata(cluster *clusterv1.Cluster, clusterClas
 	if query == nil || err != nil {
 		return err
 	}
-
+	cw.Log.Info("query constructed, start resolving", "query", query)
 	result := cw.TKRResolver.Resolve(*query)
 
 	isUnresolvedCP := isUnresolved(result.ControlPlane)
@@ -145,9 +145,16 @@ func (cw *Webhook) constructQuery(cluster *clusterv1.Cluster, clusterClass *clus
 		if query.ControlPlane == nil {
 			mdQuery.K8sVersionPrefix = tkr.Spec.Version // the TKR has already been resolved, and we will use it
 		}
-		query.MachineDeployments[i] = cw.filterOSImageQuery(tkr, tkrData, mdQuery)
-	}
 
+		var tkrDataMD TKRData
+		// md query should use TKR_DATA for each md variable
+		// if overrides not exist, then use cluster var
+		if err := topology2.GetMDVariable(cluster, i, VarTKRData, &tkrDataMD); err != nil {
+			return nil, errors.Wrapf(err, "failed getting tkr data for md-%d", i)
+		}
+
+		query.MachineDeployments[i] = cw.filterOSImageQuery(tkr, tkrDataMD, mdQuery)
+	}
 	return query, nil
 }
 

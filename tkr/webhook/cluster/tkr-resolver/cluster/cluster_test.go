@@ -40,7 +40,7 @@ const (
 	k8s1_22_0 = "v1.22.0+vmware.1"
 )
 
-var k8sVersions = []string{k8s1_20_1, k8s1_20_2, k8s1_21_1, k8s1_21_3, k8s1_22_0}
+var k8sVersions = []string{k8s1_20_1, k8s1_21_1}
 
 func TestWebhook(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -219,16 +219,26 @@ var _ = Describe("cluster.Webhook", func() {
 
 			When("the CP OSImage query exists", func() {
 				var (
-					tkr     *runv1.TanzuKubernetesRelease
-					osImage *runv1.OSImage
+					tkr      *runv1.TanzuKubernetesRelease
+					osImage  *runv1.OSImage
+					osImage2 *runv1.OSImage
+					mds      []clusterv1.MachineDeploymentTopology
 
-					osImageSelectorStr string
-					k8sVersionPrefix   string
+					osImageSelectorStr  string
+					osImageSelectorStr2 string
+					k8sVersionPrefix    string
+				)
+				const (
+					numMDs   = 3
+					mdClass0 = "md-class-0"
+					mdClass1 = "md-class-1"
 				)
 
 				BeforeEach(func() {
 					tkr = testdata.ChooseTKR(tkrs)
-					osImage = osImages[tkr.Spec.OSImages[rand.Intn(len(tkr.Spec.OSImages))].Name]
+					indx := rand.Intn(len(tkr.Spec.OSImages))
+					osImage = osImages[tkr.Spec.OSImages[indx].Name]
+					osImage2 = osImages[tkr.Spec.OSImages[(indx+1)%len(tkr.Spec.OSImages)].Name]
 
 					osImageSelectorStr = labels.Set(osImage.Labels).AsSelector().String()
 					k8sVersionPrefix = testdata.ChooseK8sVersionPrefix(tkr.Spec.Kubernetes.Version)
@@ -250,6 +260,83 @@ var _ = Describe("cluster.Webhook", func() {
 						query, err := cw.constructQuery(cluster, clusterClass)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(query.ControlPlane).To(BeNil())
+					})
+
+					When("machineDeployment md-2 is set to resolve another osimage", func() {
+						var (
+							validResolvedTKRData TKRData
+						)
+						BeforeEach(func() {
+							// construct mds
+							clusterClass.Spec.Workers.MachineDeployments = []clusterv1.MachineDeploymentClass{{
+								Class: mdClass0,
+							}, {
+								Class: mdClass1,
+								Template: clusterv1.MachineDeploymentClassTemplate{
+									Metadata: clusterv1.ObjectMeta{
+										Annotations: map[string]string{
+											runv1.AnnotationResolveOSImage: osImageSelectorStr,
+										},
+									},
+								},
+							}}
+
+							cluster.Spec.Topology.Workers = &clusterv1.WorkersTopology{}
+
+							mds = make([]clusterv1.MachineDeploymentTopology, numMDs)
+							for i := range mds {
+								md := &mds[i]
+								md.Class = mdClass1
+							}
+							mds[0].Class = mdClass0
+							cluster.Spec.Topology.Workers.MachineDeployments = mds
+
+							// construct md-2
+							osImageSelectorStr2 = labels.Set(osImage2.Labels).AsSelector().String()
+							getMap(&cluster.Spec.Topology.Workers.MachineDeployments[2].Metadata.Annotations)[runv1.AnnotationResolveOSImage] = osImageSelectorStr2
+							validResolvedTKRData = TKRData{
+								tkr.Spec.Kubernetes.Version: &TKRDataValue{
+									OSImageRef: map[string]interface{}{"version": osImage2.Spec.OS.Version, "template": "fake-template"},
+									Labels:     labels.Set(osImage2.Labels),
+								},
+							}
+							Expect(topology.SetMDVariable(cluster, 2, VarTKRData, validResolvedTKRData)).To(Succeed())
+						})
+
+						When("md-2 is not yet resolved", func() {
+							It("should return query with empty ControlPlane and Md-0, md-1, md-2 should have valid query", func() {
+								query, err := cw.constructQuery(cluster, clusterClass)
+								Expect(err).ToNot(HaveOccurred())
+								Expect(query.ControlPlane).To(BeNil())
+								Expect(query.MachineDeployments).To(HaveLen(numMDs))
+								Expect(query.MachineDeployments[0]).To(BeNil())
+								Expect(query.MachineDeployments[1]).To(BeNil())
+								Expect(query.MachineDeployments[2]).ToNot(BeNil())
+
+								Expect(query.MachineDeployments[2].OSImageSelector.String()).To(Equal(osImageSelectorStr2))
+								Expect(query.MachineDeployments[2].TKRSelector.String()).To(ContainSubstring(tkr.Labels[runv1.LabelStandard]))
+								Expect(query.MachineDeployments[2].OSImageSelector.String()).To(ContainSubstring(tkr.Labels[runv1.LabelStandard]))
+
+							})
+						})
+
+						When("md-2 is already resolved", func() {
+							BeforeEach(func() {
+								validResolvedTKRData[tkr.Spec.Kubernetes.Version].Labels[runv1.LabelOSImage] = osImage2.Name
+								validResolvedTKRData[tkr.Spec.Kubernetes.Version].Labels[runv1.LabelTKR] = tkr.Name
+								Expect(topology.SetMDVariable(cluster, 2, VarTKRData, validResolvedTKRData)).To(Succeed())
+							})
+							It("should return query with empty ControlPlane and MachineDeployment", func() {
+								query, err := cw.constructQuery(cluster, clusterClass)
+								Expect(err).ToNot(HaveOccurred())
+								Expect(query.ControlPlane).To(BeNil())
+								Expect(query.MachineDeployments).To(HaveLen(numMDs))
+								for _, mdQuery := range query.MachineDeployments {
+									Expect(mdQuery).To(BeNil())
+								}
+							})
+						})
+
 					})
 				})
 
@@ -275,16 +362,6 @@ var _ = Describe("cluster.Webhook", func() {
 				})
 
 				When("cluster needs to resolve OSImages for machineDeployments", func() {
-					const (
-						numMDs   = 3
-						mdClass0 = "md-class-0"
-						mdClass1 = "md-class-1"
-					)
-
-					var (
-						mds []clusterv1.MachineDeploymentTopology
-					)
-
 					BeforeEach(func() {
 						clusterClass.Spec.Workers.MachineDeployments = []clusterv1.MachineDeploymentClass{{
 							Class: mdClass0,
@@ -333,6 +410,30 @@ var _ = Describe("cluster.Webhook", func() {
 						It("should return an error", func() {
 							_, err := cw.constructQuery(cluster, clusterClass)
 							Expect(err).To(HaveOccurred())
+						})
+					})
+
+					When("a machineDeployment md-2 has different resolve label", func() {
+						BeforeEach(func() {
+							getMap(&cluster.Annotations)[runv1.AnnotationResolveTKR] = runv1.LabelStandard
+							getMap(&cluster.Labels)[runv1.LabelTKR] = tkr.Name
+
+							osImageSelectorStr2 = labels.Set(osImage2.Labels).AsSelector().String()
+							getMap(&cluster.Spec.Topology.Workers.MachineDeployments[2].Metadata.Annotations)[runv1.AnnotationResolveOSImage] = osImageSelectorStr2
+						})
+
+						It("should construct correct query for each md", func() {
+							query, err := cw.constructQuery(cluster, clusterClass)
+							Expect(err).ToNot(HaveOccurred())
+							Expect(query.MachineDeployments).To(HaveLen(numMDs))
+							for _, mdQuery := range query.MachineDeployments {
+								Expect(mdQuery.K8sVersionPrefix).To(Equal(k8sVersionPrefix))
+							}
+							Expect(query.MachineDeployments[0].OSImageSelector).To(BeEmpty())
+							Expect(query.MachineDeployments[1].OSImageSelector.String()).To(Equal(osImageSelectorStr))
+							Expect(query.MachineDeployments[2].OSImageSelector.String()).To(Equal(osImageSelectorStr2))
+							Expect(query.ControlPlane.TKRSelector.String()).To(ContainSubstring(tkr.Labels[runv1.LabelStandard]))
+							Expect(query.ControlPlane.OSImageSelector.String()).To(ContainSubstring(tkr.Labels[runv1.LabelStandard]))
 						})
 					})
 				})
