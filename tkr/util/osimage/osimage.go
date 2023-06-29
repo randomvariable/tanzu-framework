@@ -31,6 +31,12 @@ func labelFormat(value interface{}) string {
 	s := fmt.Sprint(value)
 	s = strings.ReplaceAll(s, "+", "---")
 
+	// process path label value to start with "p"
+	if strings.HasPrefix(s, "/") {
+		s = "p" + s
+	}
+	s = strings.ReplaceAll(s, "/", "--")
+
 	// truncate label value if length is more than maxLabelValueLength
 	if len(s) > maxLabelValueLength {
 		s = s[:maxLabelValueLength]

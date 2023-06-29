@@ -393,6 +393,7 @@ var _ = Describe("cluster.Webhook", func() {
 				const (
 					uniqueRefField     = "no-other-osimage-has-this"
 					overlengthRefField = "overlength-ref-field"
+					pathRefField       = "path-ref-field"
 				)
 				BeforeEach(func() {
 					tkr = testdata.ChooseTKR(tkrs)
@@ -410,14 +411,18 @@ var _ = Describe("cluster.Webhook", func() {
 
 					const someVersionString = "v1.24.9+vmware.1-tkg.1-226b7a84930e5368c38aa867f998ce33"
 					someOverlengthVersionString := someVersionString + strings.Repeat("longsuffix", 3)
+					somePathString := "/root/some-path/fake"
 					osImage.Spec.Image.Ref[uniqueRefField] = someVersionString
 					osImage.Spec.Image.Ref[overlengthRefField] = someOverlengthVersionString
+					osImage.Spec.Image.Ref[pathRefField] = somePathString
 					cw.TKRResolver.Add(tkr, osImage) // make sure tkr and osImage are resolvable
 
 					labelValue := osImage.Labels[osImage.Spec.Image.Type+"-"+uniqueRefField]
 					Expect(labelValue).To(Equal(version.Label(someVersionString)))
 					overlengthLabelValue := osImage.Labels[osImage.Spec.Image.Type+"-"+overlengthRefField]
 					Expect(overlengthLabelValue).To(Equal(version.Label(someOverlengthVersionString)[:63]))
+					pathLabelValue := osImage.Labels[osImage.Spec.Image.Type+"-"+pathRefField]
+					Expect(pathLabelValue).To(Equal("p" + strings.ReplaceAll(somePathString, "/", "--")))
 
 					osImageSelector = labels.Set(osImage.Labels).AsSelector()
 					osImageSelectorStr = osImageSelector.String()
